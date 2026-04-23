@@ -1,0 +1,6 @@
+.env
+*.bat
+dist/
+build/
+static/
+venv/
