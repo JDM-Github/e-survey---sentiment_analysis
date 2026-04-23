@@ -8,6 +8,7 @@ import Single from "./routes/single";
 import Batch from "./routes/batch";
 import CategoryBatch from "./routes/category-batch";
 import Accuracy from "./routes/accuracy";
+import RequestHandler from "./lib/utilities/RequestHandler";
 
 const routeTitles: Record<string, string> = {
 	"/": "Dashboard",
@@ -29,6 +30,7 @@ function TitleUpdater() {
 }
 
 export default function App() {
+	RequestHandler.init();
 	return (
 		<div className="flex h-screen overflow-hidden bg-[var(--color-bg)] text-[var(--color-text)] font-sans">
 			<TitleUpdater />

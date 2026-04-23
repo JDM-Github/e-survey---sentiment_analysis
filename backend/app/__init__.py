@@ -14,9 +14,7 @@ def create_app(config_name=None, static_folder='static'):
     else:
         app.config.from_object(DevelopmentConfig)
 
-    from app.api.health import health_bp
     from app.api.sentiment import sentiment_bp
-    app.register_blueprint(health_bp, url_prefix="/api")
     app.register_blueprint(sentiment_bp)
 
     # ---- React SPA Catch-All Route ----

@@ -2,11 +2,12 @@ from flask import Blueprint, request
 from app.core.classifier import classify_one, classify_batch, run_accuracy_test, classify_batch_with_categories
 from app.models.samples import SAMPLES
 from app.utils.responses import success, error
-from app.utils.validators import validate_json
+from app.utils.validators import validate_json, require_access
 
 sentiment_bp = Blueprint("sentiment", __name__, url_prefix="/api/sentiment")
 
 @sentiment_bp.route("/classify", methods=["POST"])
+@require_access
 @validate_json("text")
 def classify_single(data):
     """Classify a single text."""
@@ -17,6 +18,7 @@ def classify_single(data):
     return success(result, "Classification successful")
 
 @sentiment_bp.route("/classify/batch", methods=["POST"])
+@require_access
 @validate_json("texts")
 def classify_batch_endpoint(data):
     """Classify multiple texts. Expects {"texts": ["text1","text2",...]}."""
@@ -30,6 +32,7 @@ def classify_batch_endpoint(data):
     return success({"results": results}, f"Classified {len(results)} items")
 
 @sentiment_bp.route("/accuracy", methods=["POST"])
+@require_access
 def accuracy_test():
     """
     Run the predefined 30-sample accuracy test.
@@ -43,6 +46,7 @@ def accuracy_test():
     return success(report, "Accuracy test completed")
 
 @sentiment_bp.route("/classify_category/batch", methods=["POST"])
+@require_access
 @validate_json("texts", "categories")
 def classify_category_batch(data):
     """Classify texts with a category per text.
@@ -69,5 +73,6 @@ def classify_category_batch(data):
     return success({"results": results}, f"Classified {len(results)} items")
 
 @sentiment_bp.route("/health", methods=["GET"])
+@require_access
 def health():
     return success({"status": "ok"}, "Service is running")

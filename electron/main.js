@@ -74,9 +74,10 @@ function killBackend() {
     }
 }
 
-function startBackend() {
+function startBackend(port) {
     const exePath = getBackendExe();
     console.log('[Backend] launching:', exePath);
+    console.log(`[Backend] port: ${port}`);
 
     backendProcess = spawn(exePath, [], {
         stdio: 'pipe',
@@ -112,6 +113,7 @@ async function createWindow() {
     mainWindow.show();
 
     const port = await getFreePort();
+
     startBackend(port);
     try {
         await waitForPort(port);
