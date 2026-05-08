@@ -1,6 +1,8 @@
-import { type CSSProperties, type ReactNode, useRef, useState } from "react";
+import { type CSSProperties, type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { motion, useInView, AnimatePresence } from "framer-motion";
 import { SENTIMENT_COLORS, type SentimentLabel } from "../../constants";
+import { ChevronLeft, ChevronRight, Search, X } from "lucide-react";
+import { createPortal } from "react-dom";
 
 // ─── Motion presets ────────────────────────────────────────────────────────────
 /** Snappy spring — buttons, badges: physical click feel */
@@ -558,7 +560,6 @@ export function Btn({
 }
 
 
-// ─── SentimentBadge ────────────────────────────────────────────────────────────
 export function SentimentBadge({ label }: { label: string }) {
     const colors = SENTIMENT_COLORS[label as SentimentLabel] ?? SENTIMENT_COLORS.Error;
 
@@ -596,17 +597,82 @@ export function SentimentBadge({ label }: { label: string }) {
     );
 }
 
+function Tooltip({ text, children }: { text: string; children: ReactNode }) {
+    const [visible, setVisible] = useState(false);
+    const [pos, setPos] = useState({ x: 0, y: 0 });
+    const ref = useRef<HTMLDivElement>(null);
+    const tooltipRef = useRef<HTMLDivElement>(null);
 
-// ─── ResultCard ────────────────────────────────────────────────────────────────
-export function ResultCard({
-    text,
-    predicted,
-    elapsed,
-    timestamp,
-    category,
-    index = 0,
-    extra,
-}: {
+    const handleMouseMove = useCallback((e: React.MouseEvent) => {
+        const vw = window.innerWidth;
+        const vh = window.innerHeight;
+        const tw = 320;
+        const th = 80;
+        let x = e.clientX + 14;
+        let y = e.clientY + 14;
+        if (x + tw > vw - 12) x = e.clientX - tw - 14;
+        if (y + th > vh - 12) y = e.clientY - th - 14;
+        setPos({ x, y });
+    }, []);
+
+    return (
+        <div
+            ref={ref}
+            onMouseEnter={() => setVisible(true)}
+            onMouseLeave={() => setVisible(false)}
+            onMouseMove={handleMouseMove}
+            style={{ flex: 1, minWidth: 0 }}
+        >
+            {children}
+            {createPortal(
+                <AnimatePresence>
+                    {visible && (
+                        <motion.div
+                            ref={tooltipRef}
+                            initial={{ opacity: 0, scale: 0.96, y: 4 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.96, y: 4 }}
+                            transition={{ duration: 0.14, ease: EXPO }}
+                            style={{
+                                position: "fixed",
+                                left: pos.x, top: pos.y,
+                                zIndex: 999999,
+                                maxWidth: 320,
+                                background: "var(--color-bg)",
+                                border: "1px solid var(--color-border)",
+                                borderRadius: 10,
+                                padding: "10px 13px",
+                                boxShadow: "0 16px 48px rgba(0,0,0,0.5), 0 4px 16px rgba(0,0,0,0.3)",
+                                pointerEvents: "none",
+                            }}
+                        >
+                            <div style={{
+                                fontSize: 9, fontWeight: 700,
+                                fontFamily: "var(--font-mono)",
+                                color: "var(--color-text-faint)",
+                                letterSpacing: "0.1em",
+                                textTransform: "uppercase",
+                                marginBottom: 6,
+                            }}>
+                                Full text
+                            </div>
+                            <div style={{
+                                fontSize: 12, color: "var(--color-text)",
+                                lineHeight: 1.55, fontFamily: "var(--font-sans)",
+                                wordBreak: "break-word",
+                            }}>
+                                {text}
+                            </div>
+                        </motion.div>
+                    )}
+                </AnimatePresence>,
+                document.body
+            )}
+        </div>
+    );
+}
+
+interface ResultItemProps {
     text: string;
     predicted: string;
     elapsed?: number;
@@ -614,36 +680,40 @@ export function ResultCard({
     category?: string;
     index?: number;
     extra?: ReactNode;
-}) {
+}
+
+export function ResultCard({
+    text, predicted, elapsed, timestamp, category, index = 0, extra,
+}: ResultItemProps) {
     const ref = useRef(null);
-    const inView = useInView(ref, { once: true, margin: "0px 0px -24px 0px" });
     const colors = SENTIMENT_COLORS[predicted as SentimentLabel] ?? SENTIMENT_COLORS.Error;
 
     return (
         <motion.div
             ref={ref}
-            initial={{ opacity: 0, y: 12, filter: "blur(4px)" }}
-            animate={inView ? { opacity: 1, y: 0, filter: "blur(0px)" } : {}}
-            transition={{ delay: index * 0.055, duration: 0.32, ease: EXPO }}
-            whileHover={{ y: -2 }}
             style={{
                 display: "flex", alignItems: "center", gap: 12,
-                padding: "12px 14px 12px 16px",
+                padding: "11px 14px 11px 16px",
                 borderRadius: 12,
                 background: "var(--color-surface)",
                 border: "1px solid var(--color-border)",
-                // Tinted left inset shadow — sentiment color identity without overwhelming
-                boxShadow: `inset 3px 0 0 color-mix(in srgb, ${colors.text} 40%, transparent),
-                            inset 0 1px 0 color-mix(in srgb, #fff 4%, transparent),
+                boxShadow: `inset 3px 0 0 ${colors.text}55,
+                            inset 0 1px 0 rgba(255,255,255,0.04),
                             0 1px 4px rgba(0,0,0,0.1)`,
                 cursor: "default",
-                transition: "border-color 0.15s",
-                position: "relative", overflow: "hidden",
+                transition: "border-color 0.15s, box-shadow 0.15s",
+                position: "relative", overflow: "visible",
+            }}
+            onMouseEnter={e => {
+                (e.currentTarget as HTMLDivElement).style.borderColor = `${colors.text}35`;
+            }}
+            onMouseLeave={e => {
+                (e.currentTarget as HTMLDivElement).style.borderColor = "var(--color-border)";
             }}
         >
             <SentimentBadge label={predicted} />
 
-            <div style={{ flex: 1, minWidth: 0 }}>
+            <Tooltip text={text}>
                 <div style={{
                     fontSize: 13, fontWeight: 500, color: "var(--color-text)",
                     overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
@@ -663,7 +733,7 @@ export function ResultCard({
                             <motion.span
                                 initial={{ opacity: 0 }}
                                 animate={{ opacity: 0.85 }}
-                                transition={{ delay: index * 0.055 + 0.2 }}
+                                transition={{ delay: index * 0.04 + 0.18 }}
                                 style={{ color: "var(--color-accent)", fontVariantNumeric: "tabular-nums" }}
                             >
                                 {(elapsed * 1000).toFixed(0)}ms
@@ -671,22 +741,19 @@ export function ResultCard({
                         </>
                     )}
                 </div>
-            </div>
+            </Tooltip>
 
             {category && (
-                <motion.span
-                    {...ANIM.pop}
-                    style={{
-                        fontSize: 9, fontFamily: "var(--font-mono)",
-                        color: "var(--color-accent)",
-                        background: "color-mix(in srgb, var(--color-accent) 9%, transparent)",
-                        border: "1px solid color-mix(in srgb, var(--color-accent) 22%, transparent)",
-                        padding: "3px 10px", borderRadius: 5,
-                        flexShrink: 0, letterSpacing: "0.08em", textTransform: "uppercase",
-                    }}
-                >
+                <span style={{
+                    fontSize: 9, fontFamily: "var(--font-mono)",
+                    color: "var(--color-accent)",
+                    background: "color-mix(in srgb, var(--color-accent) 9%, transparent)",
+                    border: "1px solid color-mix(in srgb, var(--color-accent) 22%, transparent)",
+                    padding: "3px 10px", borderRadius: 5,
+                    flexShrink: 0, letterSpacing: "0.08em", textTransform: "uppercase",
+                }}>
                     {category}
-                </motion.span>
+                </span>
             )}
             {extra}
         </motion.div>
@@ -694,10 +761,9 @@ export function ResultCard({
 }
 
 
-// ─── ResultsHeader ─────────────────────────────────────────────────────────────
 export function ResultsHeader({ count, label = "Results" }: { count: number; label?: string }) {
     return (
-        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20 }}>
+        <div className="flex-1" style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20 }}>
             <motion.div
                 initial={{ scaleY: 0, opacity: 0 }}
                 animate={{ scaleY: 1, opacity: 1 }}
@@ -748,12 +814,318 @@ export function ResultsHeader({ count, label = "Results" }: { count: number; lab
     );
 }
 
-
-// ─── ResultList ────────────────────────────────────────────────────────────────
-export function ResultList({ children }: { children: ReactNode }) {
+const PAGE_SIZE = 10;
+function PaginationControls({
+    page, totalPages, onPrev, onNext,
+}: {
+    page: number; totalPages: number;
+    onPrev: () => void; onNext: () => void;
+}) {
+    if (totalPages <= 1) return null;
     return (
-        <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
-            {children}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}>
+            <button
+                onClick={onPrev} disabled={page === 0}
+                style={{
+                    background: "var(--color-surface)",
+                    border: "1px solid var(--color-border)",
+                    borderRadius: 8, padding: "5px 10px",
+                    display: "flex", alignItems: "center", gap: 4,
+                    cursor: page === 0 ? "not-allowed" : "pointer",
+                    opacity: page === 0 ? 0.35 : 1,
+                    color: "var(--color-text-muted)", fontSize: 11,
+                    transition: "opacity 0.15s",
+                }}
+            >
+                <ChevronLeft size={12} /> Prev
+            </button>
+            <span style={{
+                fontSize: 10, fontFamily: "var(--font-mono)",
+                color: "var(--color-text-faint)",
+            }}>
+                {page + 1} / {totalPages}
+            </span>
+            <button
+                onClick={onNext} disabled={page === totalPages - 1}
+                style={{
+                    background: "var(--color-surface)",
+                    border: "1px solid var(--color-border)",
+                    borderRadius: 8, padding: "5px 10px",
+                    display: "flex", alignItems: "center", gap: 4,
+                    cursor: page === totalPages - 1 ? "not-allowed" : "pointer",
+                    opacity: page === totalPages - 1 ? 0.35 : 1,
+                    color: "var(--color-text-muted)", fontSize: 11,
+                    transition: "opacity 0.15s",
+                }}
+            >
+                Next <ChevronRight size={12} />
+            </button>
+        </div>
+    );
+}
+
+const SENTIMENTS: SentimentLabel[] = ["Positive", "Negative", "Neutral"];
+
+function FilterBar({
+    query, onQuery,
+    sentiment, onSentiment,
+    categories, category, onCategory,
+    totalFiltered, total,
+}: {
+    query: string; onQuery: (v: string) => void;
+    sentiment: SentimentLabel | null; onSentiment: (v: SentimentLabel | null) => void;
+    categories: string[]; category: string | null; onCategory: (v: string | null) => void;
+    totalFiltered: number; total: number;
+}) {
+    const hasFilter = query || sentiment || category;
+
+    return (
+        <div style={{
+            display: "flex", flexDirection: "column", gap: 8,
+            padding: "12px 14px",
+            background: "var(--color-surface)",
+            border: "1px solid var(--color-border)",
+            borderRadius: 12,
+        }}>
+            {/* Search input */}
+            <div style={{
+                display: "flex", alignItems: "center", gap: 8,
+                background: "var(--color-bg)",
+                border: "1px solid var(--color-border)",
+                borderRadius: 8, padding: "7px 10px",
+                transition: "border-color 0.15s",
+            }}
+                onFocusCapture={e => (e.currentTarget.style.borderColor = "rgba(79,110,247,0.5)")}
+                onBlurCapture={e => (e.currentTarget.style.borderColor = "var(--color-border)")}
+            >
+                <Search size={12} color="var(--color-text-faint)" style={{ flexShrink: 0 }} />
+                <input
+                    value={query}
+                    onChange={e => onQuery(e.target.value)}
+                    placeholder="Search results…"
+                    style={{
+                        flex: 1, background: "none", border: "none", outline: "none",
+                        fontSize: 12, color: "var(--color-text)",
+                        fontFamily: "var(--font-sans)",
+                        "::placeholder": { color: "var(--color-text-faint)" },
+                    } as React.CSSProperties}
+                />
+                {query && (
+                    <button
+                        onClick={() => onQuery("")}
+                        style={{
+                            background: "none", border: "none", cursor: "pointer",
+                            padding: 0, display: "flex", color: "var(--color-text-faint)",
+                        }}
+                    >
+                        <X size={11} />
+                    </button>
+                )}
+            </div>
+
+            {/* Sentiment chips */}
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                <span style={{
+                    fontSize: 9, fontFamily: "var(--font-mono)",
+                    color: "var(--color-text-faint)",
+                    letterSpacing: "0.08em", textTransform: "uppercase",
+                    marginRight: 2,
+                }}>
+                    Sentiment
+                </span>
+                {SENTIMENTS.map(s => {
+                    const c = SENTIMENT_COLORS[s];
+                    const active = sentiment === s;
+                    return (
+                        <button
+                            key={s}
+                            onClick={() => onSentiment(active ? null : s)}
+                            style={{
+                                background: active ? c.bg : "transparent",
+                                border: `1px solid ${active ? c.border : "var(--color-border)"}`,
+                                borderRadius: 6,
+                                padding: "3px 10px",
+                                cursor: "pointer",
+                                fontSize: 10, fontWeight: 700,
+                                fontFamily: "var(--font-mono)",
+                                color: active ? c.text : "var(--color-text-faint)",
+                                letterSpacing: "0.06em",
+                                transition: "all 0.15s",
+                            }}
+                            onMouseEnter={e => {
+                                if (!active) {
+                                    e.currentTarget.style.borderColor = c.border;
+                                    e.currentTarget.style.color = c.text;
+                                }
+                            }}
+                            onMouseLeave={e => {
+                                if (!active) {
+                                    e.currentTarget.style.borderColor = "var(--color-border)";
+                                    e.currentTarget.style.color = "var(--color-text-faint)";
+                                }
+                            }}
+                        >
+                            {s}
+                        </button>
+                    );
+                })}
+            </div>
+
+            {/* Category filter — only shown if categories exist */}
+            {categories.length > 0 && (
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                    <span style={{
+                        fontSize: 9, fontFamily: "var(--font-mono)",
+                        color: "var(--color-text-faint)",
+                        letterSpacing: "0.08em", textTransform: "uppercase",
+                        marginRight: 2,
+                    }}>
+                        Category
+                    </span>
+                    {categories.map(cat => {
+                        const active = category === cat;
+                        return (
+                            <button
+                                key={cat}
+                                onClick={() => onCategory(active ? null : cat)}
+                                style={{
+                                    background: active
+                                        ? "color-mix(in srgb, var(--color-accent) 10%, transparent)"
+                                        : "transparent",
+                                    border: `1px solid ${active
+                                        ? "color-mix(in srgb, var(--color-accent) 30%, transparent)"
+                                        : "var(--color-border)"}`,
+                                    borderRadius: 6,
+                                    padding: "3px 10px",
+                                    cursor: "pointer",
+                                    fontSize: 9,
+                                    fontFamily: "var(--font-mono)",
+                                    color: active ? "var(--color-accent)" : "var(--color-text-faint)",
+                                    letterSpacing: "0.06em",
+                                    textTransform: "uppercase",
+                                    transition: "all 0.15s",
+                                    whiteSpace: "nowrap",
+                                }}
+                            >
+                                {cat}
+                            </button>
+                        );
+                    })}
+                </div>
+            )}
+
+            <div style={{
+                display: "flex", alignItems: "center",
+                justifyContent: "space-between", paddingTop: 2,
+            }}>
+                <span style={{
+                    fontSize: 9, fontFamily: "var(--font-mono)",
+                    color: "var(--color-text-faint)",
+                }}>
+                    {hasFilter
+                        ? `${totalFiltered} of ${total} results`
+                        : `${total} results`}
+                </span>
+                {hasFilter && (
+                    <button
+                        onClick={() => { onQuery(""); onSentiment(null); onCategory(null); }}
+                        style={{
+                            background: "none", border: "none", cursor: "pointer",
+                            fontSize: 9, fontFamily: "var(--font-mono)",
+                            color: "var(--color-text-faint)",
+                            display: "flex", alignItems: "center", gap: 4,
+                            padding: 0, transition: "color 0.15s",
+                        }}
+                        onMouseEnter={e => e.currentTarget.style.color = "var(--color-text)"}
+                        onMouseLeave={e => e.currentTarget.style.color = "var(--color-text-faint)"}
+                    >
+                        <X size={9} /> Clear filters
+                    </button>
+                )}
+            </div>
+        </div>
+    );
+}
+
+export function ResultList({ children }: { children: ReactNode }) {
+    const raw = (Array.isArray(children) ? children : [children]) as React.ReactElement<ResultItemProps>[];
+
+    const [query, setQuery] = useState("");
+    const [sentiment, setSentiment] = useState<SentimentLabel | null>(null);
+    const [category, setCategory] = useState<string | null>(null);
+    const [page, setPage] = useState(0);
+    const categories = Array.from(
+        new Set(
+            raw.map(c => c?.props?.category).filter(Boolean) as string[]
+        )
+    );
+
+    const filtered = raw.filter(child => {
+        const p = child?.props;
+        if (!p) return false;
+        if (sentiment && p.predicted !== sentiment) return false;
+        if (category && p.category !== category) return false;
+        if (query) {
+            const q = query.toLowerCase();
+            const inText = p.text?.toLowerCase().includes(q);
+            const inCat = p.category?.toLowerCase().includes(q);
+            if (!inText && !inCat) return false;
+        }
+        return true;
+    });
+
+    const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
+    useEffect(() => { setPage(0); }, [query, sentiment, category, raw.length]);
+
+    const paged = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+
+    const showCategories = categories.length > 0;
+
+    return (
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            <FilterBar
+                query={query} onQuery={setQuery}
+                sentiment={sentiment} onSentiment={setSentiment}
+                categories={showCategories ? categories : []}
+                category={category} onCategory={setCategory}
+                totalFiltered={filtered.length} total={raw.length}
+            />
+
+            <PaginationControls
+                page={page} totalPages={totalPages}
+                onPrev={() => setPage(p => Math.max(0, p - 1))}
+                onNext={() => setPage(p => Math.min(totalPages - 1, p + 1))}
+            />
+
+            <AnimatePresence mode="wait">
+                <motion.div
+                    key={`${query}-${sentiment}-${category}-${page}`}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.15 }}
+                    style={{ display: "flex", flexDirection: "column", gap: 7 }}
+                >
+                    {paged.length > 0 ? paged : (
+                        <div style={{
+                            padding: "32px 16px", textAlign: "center",
+                            fontSize: 12, color: "var(--color-text-faint)",
+                            fontFamily: "var(--font-mono)",
+                            background: "var(--color-surface)",
+                            border: "1px solid var(--color-border)",
+                            borderRadius: 12,
+                        }}>
+                            No results match your filters
+                        </div>
+                    )}
+                </motion.div>
+            </AnimatePresence>
+
+            <PaginationControls
+                page={page} totalPages={totalPages}
+                onPrev={() => setPage(p => Math.max(0, p - 1))}
+                onNext={() => setPage(p => Math.min(totalPages - 1, p + 1))}
+            />
         </div>
     );
 }

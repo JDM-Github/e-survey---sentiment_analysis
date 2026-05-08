@@ -18,7 +18,7 @@ const TOOLS = [
 		icon: Layers,
 		title: "Batch",
 		subtitle: "Multiple texts, concurrent",
-		description: "Paste many texts or upload a CSV. All classified concurrently via the LLM.",
+		description: "Paste many texts or upload a CSV. All classified concurrently.",
 		accent: "#10B981",
 		endpoint: "POST /classify/batch",
 		keyFeatures: ["CSV upload support", "Concurrent processing", "Bulk result export", "Per-item latency"],
@@ -28,7 +28,7 @@ const TOOLS = [
 		icon: Tag,
 		title: "With Category",
 		subtitle: "Sentiment + topic detection",
-		description: "AI classifies both sentiment and the best matching category from your defined list.",
+		description: "Classifies both sentiment and the best matching category from your defined list.",
 		accent: "#F59E0B",
 		endpoint: "POST /classify_category/batch",
 		keyFeatures: ["Custom category list", "Dual classification", "Batch support", "Category confidence"],
@@ -47,8 +47,8 @@ const TOOLS = [
 
 const STATS = [
 	{ val: "3", label: "Sentiment classes", sub: "Positive · Negative · Neutral" },
-	{ val: "30", label: "Test samples", sub: "Built-in accuracy benchmark" },
-	{ val: "∞", label: "Batch size", sub: "Concurrent thread pool" },
+	{ val: "2000", label: "Test samples", sub: "Built-in accuracy benchmark" },
+	{ val: "20", label: "Batch size", sub: "Concurrent thread pool" },
 	{ val: "0°", label: "Temperature", sub: "Deterministic outputs" },
 ];
 
@@ -118,7 +118,7 @@ export default function Dashboard() {
 							WebkitBackgroundClip: "text",
 							WebkitTextFillColor: "transparent",
 						}}>
-							AI precision.
+							precision.
 						</span>
 					</h1>
 
@@ -127,7 +127,7 @@ export default function Dashboard() {
 						lineHeight: 1.65, maxWidth: 480, margin: 0,
 					}}>
 						Four tools covering single, batch, categorized classification
-						and accuracy evaluation — all powered by LLM inference.
+						and accuracy evaluation.
 					</p>
 				</motion.div>
 
@@ -294,7 +294,7 @@ export default function Dashboard() {
 						paddingTop: "1.5rem",
 					}}
 				>
-					Filipino Sentiment Classifier · LLM-powered inference
+					English | Filipino Sentiment Classifier
 				</motion.div>
 
 			</div>

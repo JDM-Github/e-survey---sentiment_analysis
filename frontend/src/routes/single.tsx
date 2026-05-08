@@ -216,7 +216,6 @@ export default function Single() {
                             }}
                         >
                             {[
-                                "Real-time LLM classification",
                                 "Filipino & Taglish support",
                                 "Latency tracked per request",
                             ].map((f, i) => (

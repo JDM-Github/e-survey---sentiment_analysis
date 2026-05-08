@@ -55,7 +55,9 @@ export default function App() {
 					style={{ borderTop: "1px solid var(--color-border)" }}
 					className="h-9 bg-gradient-to-r from-[#1B3769]/5 to-[#2D5299]/5 flex items-center justify-between px-6"
 				>
-					<span className="text-[9px] text-white/20 font-mono">
+					<span className="text-[12px] font-mono text-white/50" style={{
+						letterSpacing: "-0.03em"
+					}}>
 						Developed By: John Dave Pega
 					</span>
 				</motion.footer>
