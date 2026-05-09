@@ -8,15 +8,15 @@ import {
     BtnDivider, Chip,
 } from "../components/ui";
 import { FileUpload, DownloadTemplate, DownloadResults } from "../components/file-tools";
-import {BatchAnalysis} from "../components/BatchAnalysis";
+import { BatchAnalysis } from "../components/BatchAnalysis";
 import { UploadAnyXlsx } from "../components/UploadAny";
 
-interface CatResult {
+interface BatchResult {
     text: string;
     predicted: string;
-    category: string;
     elapsed: number;
     timestamp: string;
+    category: string;
 }
 
 interface StoredRun {
@@ -28,73 +28,116 @@ interface StoredRun {
         minCharLength: number;
         categories: string[];
     };
-    results: CatResult[];
+    results: BatchResult[];
     textCount: number;
 }
 
-const EASE_OUT_EXPO = [0.16, 1, 0.3, 1] as const;
-const STORAGE_KEY = "category_batch_state";
-
-// ---------- IndexedDB ----------
-const DB_NAME = "CategoryBatchDB";
-const STORE_NAME = "runs";
-const DB_VERSION = 1;
-
-function openDB(): Promise<IDBDatabase> {
-    return new Promise((resolve, reject) => {
-        const request = indexedDB.open(DB_NAME, DB_VERSION);
-        request.onerror = () => reject(request.error);
-        request.onsuccess = () => resolve(request.result);
-        request.onupgradeneeded = (event) => {
-            const db = (event.target as IDBOpenDBRequest).result;
-            if (!db.objectStoreNames.contains(STORE_NAME)) {
-                db.createObjectStore(STORE_NAME, { keyPath: "id" });
-            }
-        };
-    });
-}
-
+const isDeployed = import.meta.env.VITE_MODE === 'deployed';
+const useElectronStorage = isDeployed && !!window.electronAPI?.isElectron;
 async function saveRun(run: StoredRun): Promise<void> {
-    const db = await openDB();
-    return new Promise((resolve, reject) => {
-        const tx = db.transaction(STORE_NAME, "readwrite");
-        const store = tx.objectStore(STORE_NAME);
-        const req = store.put(run);
-        req.onerror = () => reject(req.error);
-        req.onsuccess = () => resolve();
-        tx.oncomplete = () => db.close();
-    });
+    if (useElectronStorage) {
+        await window.electronAPI!.saveRun_category_batch(run);
+    } else {
+        const DB_NAME = "CategoryBatchDB";
+        const STORE_NAME = "runs";
+        const DB_VERSION = 1;
+        const openDB = (): Promise<IDBDatabase> => {
+            return new Promise((resolve, reject) => {
+                const request = indexedDB.open(DB_NAME, DB_VERSION);
+                request.onerror = () => reject(request.error);
+                request.onsuccess = () => resolve(request.result);
+                request.onupgradeneeded = (event) => {
+                    const db = (event.target as IDBOpenDBRequest).result;
+                    if (!db.objectStoreNames.contains(STORE_NAME)) {
+                        db.createObjectStore(STORE_NAME, { keyPath: "id" });
+                    }
+                };
+            });
+        };
+        const db = await openDB();
+        await new Promise<void>((resolve, reject) => {
+            const tx = db.transaction(STORE_NAME, "readwrite");
+            const store = tx.objectStore(STORE_NAME);
+            const req = store.put(run);
+            req.onerror = () => reject(req.error);
+            req.onsuccess = () => resolve();
+            tx.oncomplete = () => db.close();
+        });
+    }
 }
 
 async function getAllRuns(): Promise<StoredRun[]> {
-    const db = await openDB();
-    return new Promise((resolve, reject) => {
-        const tx = db.transaction(STORE_NAME, "readonly");
-        const store = tx.objectStore(STORE_NAME);
-        const req = store.getAll();
-        req.onerror = () => reject(req.error);
-        req.onsuccess = () => {
-            const runs = req.result as StoredRun[];
-            runs.sort((a, b) => b.createdAt - a.createdAt);
-            resolve(runs);
+    if (useElectronStorage) {
+        return await window.electronAPI!.getAllRuns_category_batch();
+    } else {
+        const DB_NAME = "CategoryBatchDB";
+        const STORE_NAME = "runs";
+        const DB_VERSION = 1;
+        const openDB = (): Promise<IDBDatabase> => {
+            return new Promise((resolve, reject) => {
+                const request = indexedDB.open(DB_NAME, DB_VERSION);
+                request.onerror = () => reject(request.error);
+                request.onsuccess = () => resolve(request.result);
+                request.onupgradeneeded = (event) => {
+                    const db = (event.target as IDBOpenDBRequest).result;
+                    if (!db.objectStoreNames.contains(STORE_NAME)) {
+                        db.createObjectStore(STORE_NAME, { keyPath: "id" });
+                    }
+                };
+            });
         };
-        tx.oncomplete = () => db.close();
-    });
+        const db = await openDB();
+        return new Promise((resolve, reject) => {
+            const tx = db.transaction(STORE_NAME, "readonly");
+            const store = tx.objectStore(STORE_NAME);
+            const req = store.getAll();
+            req.onerror = () => reject(req.error);
+            req.onsuccess = () => {
+                const runs = req.result as StoredRun[];
+                runs.sort((a, b) => b.createdAt - a.createdAt);
+                resolve(runs);
+            };
+            tx.oncomplete = () => db.close();
+        });
+    }
 }
 
 async function clearAllRuns(): Promise<void> {
-    const db = await openDB();
-    return new Promise((resolve, reject) => {
-        const tx = db.transaction(STORE_NAME, "readwrite");
-        const store = tx.objectStore(STORE_NAME);
-        const req = store.clear();
-        req.onerror = () => reject(req.error);
-        req.onsuccess = () => resolve();
-        tx.oncomplete = () => db.close();
-    });
+    if (useElectronStorage) {
+        await window.electronAPI!.clearAllRuns_category_batch();
+    } else {
+        const DB_NAME = "CategoryBatchDB";
+        const STORE_NAME = "runs";
+        const DB_VERSION = 1;
+        const openDB = (): Promise<IDBDatabase> => {
+            return new Promise((resolve, reject) => {
+                const request = indexedDB.open(DB_NAME, DB_VERSION);
+                request.onerror = () => reject(request.error);
+                request.onsuccess = () => resolve(request.result);
+                request.onupgradeneeded = (event) => {
+                    const db = (event.target as IDBOpenDBRequest).result;
+                    if (!db.objectStoreNames.contains(STORE_NAME)) {
+                        db.createObjectStore(STORE_NAME, { keyPath: "id" });
+                    }
+                };
+            });
+        };
+        const db = await openDB();
+        await new Promise<void>((resolve, reject) => {
+            const tx = db.transaction(STORE_NAME, "readwrite");
+            const store = tx.objectStore(STORE_NAME);
+            const req = store.clear();
+            req.onerror = () => reject(req.error);
+            req.onsuccess = () => resolve();
+            tx.oncomplete = () => db.close();
+        });
+    }
 }
 
-// ---------- Main component ----------
+// ---------- Main component (rest unchanged) ----------
+const EASE_OUT_EXPO = [0.16, 1, 0.3, 1] as const;
+const STORAGE_KEY = "category_batch_state";
+
 export default function CategoryBatch() {
     const loadInitialState = () => {
         try {
@@ -117,7 +160,7 @@ export default function CategoryBatch() {
     const [raw, setRaw] = useState(initialState.raw);
     const [categories, setCategories] = useState<string[]>(initialState.categories);
     const [catInput, setCatInput] = useState("");
-    const [results, setResults] = useState<CatResult[]>(initialState.results);
+    const [results, setResults] = useState<BatchResult[]>(initialState.results);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState("");
 
@@ -134,14 +177,8 @@ export default function CategoryBatch() {
     const inputRef = useRef<HTMLInputElement>(null);
 
     const texts = raw.split("\n").map((t: string) => t.trim()).filter(Boolean);
-
-    // Texts that would be ignored based on minCharLength
-    const ignoredCount = minCharLength > 0
-        ? texts.filter((t: any) => t.length <= minCharLength).length
-        : 0;
-    const effectiveTexts = minCharLength > 0
-        ? texts.filter((t: any) => t.length > minCharLength)
-        : texts;
+    const ignoredCount = minCharLength > 0 ? texts.filter((t: any) => t.length <= minCharLength).length : 0;
+    const effectiveTexts = minCharLength > 0 ? texts.filter((t: any) => t.length > minCharLength) : texts;
 
     useEffect(() => {
         const stateToSave = { raw, categories, results };
@@ -214,6 +251,7 @@ export default function CategoryBatch() {
         setError("");
     };
 
+    // JSX remains exactly the same as your original – unchanged from here down
     return (
         <TwoPanelLayout
             hasResults={true}
@@ -622,7 +660,6 @@ export default function CategoryBatch() {
                     />
                 </>
             }
-            
         />
     );
 }

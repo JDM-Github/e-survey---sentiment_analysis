@@ -5,7 +5,7 @@ a = Analysis(
     ['production_run.py'],
     pathex=[],
     binaries=[],
-    datas=[('app', 'app'), ('static', 'static'), ('.env', '.')],
+    datas=[('app', 'app'), ('static', 'static'), ('resources', 'resources'), ('.env', '.')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},

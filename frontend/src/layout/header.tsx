@@ -121,7 +121,7 @@ export default function Header() {
                         border: "1px solid var(--color-border)",
                     }}
                 >
-                    v1.1.0
+                    v1.2.0
                 </span>
             </div>
         </motion.header>

@@ -10,6 +10,16 @@ from app.models.prompts import (
 )
 
 # ─────────────────────────────────────────────────────────────────────────────
+#  Fallback models (defined here; can also be moved to Config)
+# ─────────────────────────────────────────────────────────────────────────────
+
+FALLBACK_MODELS = [
+    "gemma3:27b-cloud",
+    "gemma3:12b-cloud",
+    "gemma3:4b-cloud",
+]
+
+# ─────────────────────────────────────────────────────────────────────────────
 #  Scoring
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -78,104 +88,122 @@ def _filter_by_length(
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-#  Single-text calls
+#  Single-text calls with fallback
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _call_ollama(text: str) -> str:
-    """Send one text, return one predicted sentiment label."""
-    try:
-        resp = requests.post(
-            Config.OLLAMA_API_URL,
-            json={
-                "model": Config.OLLAMA_MODEL,
-                "messages": [
-                    {"role": "system",  "content": SINGLE_SENTIMENT_SYSTEM},
-                    {"role": "user",    "content": single_sentiment_user(text)},
-                ],
-                "stream": False,
-                "options": {"temperature": 0, "num_predict": 10},
-            },
-            headers=_make_headers(),
-            timeout=Config.REQUEST_TIMEOUT,
-        )
-        label = resp.json()["message"]["content"].strip()
-        return _parse_sentiment(label)
-    except Exception:
-        return "Error"
+    """Send one text, return one predicted sentiment label.
+    Tries primary model, then each fallback model on failure."""
+    models_to_try = [Config.OLLAMA_MODEL] + FALLBACK_MODELS
+    last_exception = None
+
+    for model in models_to_try:
+        try:
+            resp = requests.post(
+                Config.OLLAMA_API_URL,
+                json={
+                    "model": model,
+                    "messages": [
+                        {"role": "system",  "content": SINGLE_SENTIMENT_SYSTEM},
+                        {"role": "user",    "content": single_sentiment_user(text)},
+                    ],
+                    "stream": False,
+                    "options": {"temperature": 0, "num_predict": 10},
+                },
+                headers=_make_headers(),
+                timeout=Config.REQUEST_TIMEOUT,
+            )
+            label = resp.json()["message"]["content"].strip()
+            return _parse_sentiment(label)
+        except Exception as e:
+            last_exception = e
+            continue   # try next fallback model
+
+    # All models failed
+    return "Error"
 
 
 def _call_ollama_with_category(text: str, categories: list[str]) -> dict:
-    """Send one text, return sentiment + category."""
-    try:
-        resp = requests.post(
-            Config.OLLAMA_API_URL,
-            json={
-                "model": Config.OLLAMA_MODEL,
-                "messages": [
-                    {"role": "system", "content": single_category_system(categories)},
-                    {"role": "user",   "content": single_category_user(text)},
-                ],
-                "stream": False,
-                "options": {"temperature": 0, "num_predict": 20},
-            },
-            headers=_make_headers(),
-            timeout=Config.REQUEST_TIMEOUT,
-        )
-        raw = resp.json()["message"]["content"].strip()
-        sentiment = "Neutral"
-        category  = categories[0]
+    """Send one text, return sentiment + category. Uses fallback models."""
+    models_to_try = [Config.OLLAMA_MODEL] + FALLBACK_MODELS
 
-        for line in raw.splitlines():
-            line = line.strip()
-            if line.lower().startswith("sentiment:"):
-                sentiment = _parse_sentiment(line.split(":", 1)[1].strip())
-            elif line.lower().startswith("category:"):
-                label = line.split(":", 1)[1].strip()
-                for cat in categories:
-                    if cat.lower() in label.lower():
-                        category = cat
-                        break
+    for model in models_to_try:
+        try:
+            resp = requests.post(
+                Config.OLLAMA_API_URL,
+                json={
+                    "model": model,
+                    "messages": [
+                        {"role": "system", "content": single_category_system(categories)},
+                        {"role": "user",   "content": single_category_user(text)},
+                    ],
+                    "stream": False,
+                    "options": {"temperature": 0, "num_predict": 20},
+                },
+                headers=_make_headers(),
+                timeout=Config.REQUEST_TIMEOUT,
+            )
+            raw = resp.json()["message"]["content"].strip()
+            sentiment = "Neutral"
+            category  = categories[0]
 
-        return {"sentiment": sentiment, "category": category}
-    except Exception:
-        return {"sentiment": "Error", "category": "Error"}
+            for line in raw.splitlines():
+                line = line.strip()
+                if line.lower().startswith("sentiment:"):
+                    sentiment = _parse_sentiment(line.split(":", 1)[1].strip())
+                elif line.lower().startswith("category:"):
+                    label = line.split(":", 1)[1].strip()
+                    for cat in categories:
+                        if cat.lower() in label.lower():
+                            category = cat
+                            break
+            return {"sentiment": sentiment, "category": category}
+        except Exception:
+            continue
+
+    return {"sentiment": "Error", "category": "Error"}
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-#  Batch-inference calls
+#  Batch-inference calls with fallback
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _call_ollama_batch(texts: list[str]) -> list[str]:
     """
     Send N texts in a single API call, return N sentiment labels in order.
-    Falls back to "Neutral" for any unparseable line.
+    Falls back to other models if primary fails.
     """
-    try:
-        resp = requests.post(
-            Config.OLLAMA_API_URL,
-            json={
-                "model": Config.OLLAMA_MODEL,
-                "messages": [
-                    {"role": "system", "content": BATCH_SENTIMENT_SYSTEM},
-                    {"role": "user",   "content": batch_sentiment_user(texts)},
-                ],
-                "stream": False,
-                "options": {"temperature": 0, "num_predict": len(texts) * 5},
-            },
-            headers=_make_headers(),
-            timeout=Config.REQUEST_TIMEOUT,
-        )
-        raw_lines = [
-            line.strip()
-            for line in resp.json()["message"]["content"].strip().splitlines()
-            if line.strip()
-        ]
-        labels = [_parse_sentiment(line) for line in raw_lines]
-        if len(labels) < len(texts):
-            labels += ["Neutral"] * (len(texts) - len(labels))
-        return labels[: len(texts)]
-    except Exception:
-        return ["Error"] * len(texts)
+    models_to_try = [Config.OLLAMA_MODEL] + FALLBACK_MODELS
+
+    for model in models_to_try:
+        try:
+            resp = requests.post(
+                Config.OLLAMA_API_URL,
+                json={
+                    "model": model,
+                    "messages": [
+                        {"role": "system", "content": BATCH_SENTIMENT_SYSTEM},
+                        {"role": "user",   "content": batch_sentiment_user(texts)},
+                    ],
+                    "stream": False,
+                    "options": {"temperature": 0, "num_predict": len(texts) * 5},
+                },
+                headers=_make_headers(),
+                timeout=Config.REQUEST_TIMEOUT,
+            )
+            raw_lines = [
+                line.strip()
+                for line in resp.json()["message"]["content"].strip().splitlines()
+                if line.strip()
+            ]
+            labels = [_parse_sentiment(line) for line in raw_lines]
+            if len(labels) < len(texts):
+                labels += ["Neutral"] * (len(texts) - len(labels))
+            return labels[: len(texts)]
+        except Exception:
+            continue
+
+    return ["Error"] * len(texts)
 
 
 def _call_ollama_batch_with_category(
@@ -183,52 +211,57 @@ def _call_ollama_batch_with_category(
 ) -> list[dict]:
     """
     Send N texts in a single API call, return N {sentiment, category} dicts.
-    Expected response format per line:  <Sentiment> | <Category>
+    Uses fallback models.
     """
     default = {"sentiment": "Neutral", "category": categories[0]}
-    try:
-        resp = requests.post(
-            Config.OLLAMA_API_URL,
-            json={
-                "model": Config.OLLAMA_MODEL,
-                "messages": [
-                    {"role": "system", "content": batch_category_system(categories)},
-                    {"role": "user",   "content": batch_category_user(texts)},
-                ],
-                "stream": False,
-                "options": {"temperature": 0, "num_predict": len(texts) * 10},
-            },
-            headers=_make_headers(),
-            timeout=Config.REQUEST_TIMEOUT,
-        )
-        raw_lines = [
-            line.strip()
-            for line in resp.json()["message"]["content"].strip().splitlines()
-            if line.strip()
-        ]
+    models_to_try = [Config.OLLAMA_MODEL] + FALLBACK_MODELS
 
-        results = []
-        for line in raw_lines:
-            parts = line.split("|", 1)
-            sentiment = _parse_sentiment(parts[0].strip()) if parts else "Neutral"
-            category  = categories[0]
-            if len(parts) == 2:
-                label = parts[1].strip()
-                for cat in categories:
-                    if cat.lower() in label.lower():
-                        category = cat
-                        break
-            results.append({"sentiment": sentiment, "category": category})
+    for model in models_to_try:
+        try:
+            resp = requests.post(
+                Config.OLLAMA_API_URL,
+                json={
+                    "model": model,
+                    "messages": [
+                        {"role": "system", "content": batch_category_system(categories)},
+                        {"role": "user",   "content": batch_category_user(texts)},
+                    ],
+                    "stream": False,
+                    "options": {"temperature": 0, "num_predict": len(texts) * 10},
+                },
+                headers=_make_headers(),
+                timeout=Config.REQUEST_TIMEOUT,
+            )
+            raw_lines = [
+                line.strip()
+                for line in resp.json()["message"]["content"].strip().splitlines()
+                if line.strip()
+            ]
 
-        if len(results) < len(texts):
-            results += [default] * (len(texts) - len(results))
-        return results[: len(texts)]
-    except Exception:
-        return [{"sentiment": "Error", "category": "Error"}] * len(texts)
+            results = []
+            for line in raw_lines:
+                parts = line.split("|", 1)
+                sentiment = _parse_sentiment(parts[0].strip()) if parts else "Neutral"
+                category  = categories[0]
+                if len(parts) == 2:
+                    label = parts[1].strip()
+                    for cat in categories:
+                        if cat.lower() in label.lower():
+                            category = cat
+                            break
+                results.append({"sentiment": sentiment, "category": category})
+
+            if len(results) < len(texts):
+                results += [default] * (len(texts) - len(results))
+            return results[: len(texts)]
+        except Exception:
+            continue
+
+    return [{"sentiment": "Error", "category": "Error"}] * len(texts)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-#  Public API
+#  Public API (unchanged except fallback is now built into low-level calls)
 # ─────────────────────────────────────────────────────────────────────────────
 
 def classify_one(text: str) -> dict:

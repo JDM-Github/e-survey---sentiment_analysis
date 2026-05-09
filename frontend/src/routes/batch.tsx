@@ -30,69 +30,113 @@ interface StoredRun {
     textCount: number;
 }
 
-const EASE_OUT_EXPO = [0.16, 1, 0.3, 1] as const;
-const STORAGE_KEY = "batch_classification_state";
-
-// ---------- IndexedDB ----------
-const DB_NAME = "BatchClassificationDB";
-const STORE_NAME = "runs";
-const DB_VERSION = 1;
-
-function openDB(): Promise<IDBDatabase> {
-    return new Promise((resolve, reject) => {
-        const request = indexedDB.open(DB_NAME, DB_VERSION);
-        request.onerror = () => reject(request.error);
-        request.onsuccess = () => resolve(request.result);
-        request.onupgradeneeded = (event) => {
-            const db = (event.target as IDBOpenDBRequest).result;
-            if (!db.objectStoreNames.contains(STORE_NAME)) {
-                db.createObjectStore(STORE_NAME, { keyPath: "id" });
-            }
-        };
-    });
-}
-
+const isDeployed = import.meta.env.VITE_MODE === 'deployed';
+const useElectronStorage = isDeployed && !!window.electronAPI?.isElectron;
 async function saveRun(run: StoredRun): Promise<void> {
-    const db = await openDB();
-    return new Promise((resolve, reject) => {
-        const tx = db.transaction(STORE_NAME, "readwrite");
-        const store = tx.objectStore(STORE_NAME);
-        const req = store.put(run);
-        req.onerror = () => reject(req.error);
-        req.onsuccess = () => resolve();
-        tx.oncomplete = () => db.close();
-    });
+    if (useElectronStorage) {
+        await window.electronAPI!.saveRun_batch(run);
+    } else {
+        // IndexedDB implementation
+        const DB_NAME = "BatchClassificationDB";
+        const STORE_NAME = "runs";
+        const DB_VERSION = 1;
+        const openDB = (): Promise<IDBDatabase> => {
+            return new Promise((resolve, reject) => {
+                const request = indexedDB.open(DB_NAME, DB_VERSION);
+                request.onerror = () => reject(request.error);
+                request.onsuccess = () => resolve(request.result);
+                request.onupgradeneeded = (event) => {
+                    const db = (event.target as IDBOpenDBRequest).result;
+                    if (!db.objectStoreNames.contains(STORE_NAME)) {
+                        db.createObjectStore(STORE_NAME, { keyPath: "id" });
+                    }
+                };
+            });
+        };
+        const db = await openDB();
+        await new Promise<void>((resolve, reject) => {
+            const tx = db.transaction(STORE_NAME, "readwrite");
+            const store = tx.objectStore(STORE_NAME);
+            const req = store.put(run);
+            req.onerror = () => reject(req.error);
+            req.onsuccess = () => resolve();
+            tx.oncomplete = () => db.close();
+        });
+    }
 }
 
 async function getAllRuns(): Promise<StoredRun[]> {
-    const db = await openDB();
-    return new Promise((resolve, reject) => {
-        const tx = db.transaction(STORE_NAME, "readonly");
-        const store = tx.objectStore(STORE_NAME);
-        const req = store.getAll();
-        req.onerror = () => reject(req.error);
-        req.onsuccess = () => {
-            const runs = req.result as StoredRun[];
-            runs.sort((a, b) => b.createdAt - a.createdAt);
-            resolve(runs);
+    if (useElectronStorage) {
+        return await window.electronAPI!.getAllRuns_batch();
+    } else {
+        const DB_NAME = "BatchClassificationDB";
+        const STORE_NAME = "runs";
+        const DB_VERSION = 1;
+        const openDB = (): Promise<IDBDatabase> => {
+            return new Promise((resolve, reject) => {
+                const request = indexedDB.open(DB_NAME, DB_VERSION);
+                request.onerror = () => reject(request.error);
+                request.onsuccess = () => resolve(request.result);
+                request.onupgradeneeded = (event) => {
+                    const db = (event.target as IDBOpenDBRequest).result;
+                    if (!db.objectStoreNames.contains(STORE_NAME)) {
+                        db.createObjectStore(STORE_NAME, { keyPath: "id" });
+                    }
+                };
+            });
         };
-        tx.oncomplete = () => db.close();
-    });
+        const db = await openDB();
+        return new Promise((resolve, reject) => {
+            const tx = db.transaction(STORE_NAME, "readonly");
+            const store = tx.objectStore(STORE_NAME);
+            const req = store.getAll();
+            req.onerror = () => reject(req.error);
+            req.onsuccess = () => {
+                const runs = req.result as StoredRun[];
+                runs.sort((a, b) => b.createdAt - a.createdAt);
+                resolve(runs);
+            };
+            tx.oncomplete = () => db.close();
+        });
+    }
 }
 
 async function clearAllRuns(): Promise<void> {
-    const db = await openDB();
-    return new Promise((resolve, reject) => {
-        const tx = db.transaction(STORE_NAME, "readwrite");
-        const store = tx.objectStore(STORE_NAME);
-        const req = store.clear();
-        req.onerror = () => reject(req.error);
-        req.onsuccess = () => resolve();
-        tx.oncomplete = () => db.close();
-    });
+    if (useElectronStorage) {
+        await window.electronAPI!.clearAllRuns_batch();
+    } else {
+        const DB_NAME = "BatchClassificationDB";
+        const STORE_NAME = "runs";
+        const DB_VERSION = 1;
+        const openDB = (): Promise<IDBDatabase> => {
+            return new Promise((resolve, reject) => {
+                const request = indexedDB.open(DB_NAME, DB_VERSION);
+                request.onerror = () => reject(request.error);
+                request.onsuccess = () => resolve(request.result);
+                request.onupgradeneeded = (event) => {
+                    const db = (event.target as IDBOpenDBRequest).result;
+                    if (!db.objectStoreNames.contains(STORE_NAME)) {
+                        db.createObjectStore(STORE_NAME, { keyPath: "id" });
+                    }
+                };
+            });
+        };
+        const db = await openDB();
+        await new Promise<void>((resolve, reject) => {
+            const tx = db.transaction(STORE_NAME, "readwrite");
+            const store = tx.objectStore(STORE_NAME);
+            const req = store.clear();
+            req.onerror = () => reject(req.error);
+            req.onsuccess = () => resolve();
+            tx.oncomplete = () => db.close();
+        });
+    }
 }
 
-// ---------- Main component ----------
+// ---------- Main component (uncharted territory below – only UI, no storage logic changes) ----------
+const EASE_OUT_EXPO = [0.16, 1, 0.3, 1] as const;
+const STORAGE_KEY = "batch_classification_state";
+
 export default function Batch() {
     const loadInitialState = () => {
         try {
@@ -116,24 +160,17 @@ export default function Batch() {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState("");
 
-    // New params
     const [maxWorkers, setMaxWorkers] = useState(4);
     const [batchSize, setBatchSize] = useState(5);
     const [minCharLength, setMinCharLength] = useState(0);
 
-    // History
     const [savedRuns, setSavedRuns] = useState<StoredRun[]>([]);
     const [showHistory, setShowHistory] = useState(false);
     const [showAnalysis, setShowAnalysis] = useState(false);
 
     const texts = raw.split("\n").map((t: string) => t.trim()).filter(Boolean);
-
-    const ignoredCount = minCharLength > 0
-        ? texts.filter((t: any) => t.length <= minCharLength).length
-        : 0;
-    const effectiveTexts = minCharLength > 0
-        ? texts.filter((t: any) => t.length > minCharLength)
-        : texts;
+    const ignoredCount = minCharLength > 0 ? texts.filter((t: any) => t.length <= minCharLength).length : 0;
+    const effectiveTexts = minCharLength > 0 ? texts.filter((t: any) => t.length > minCharLength) : texts;
 
     useEffect(() => {
         const stateToSave = { raw, results };
@@ -193,6 +230,7 @@ export default function Batch() {
         setError("");
     };
 
+    // --- The rest (JSX) is unchanged from your original ---
     return (
         <>
             <TwoPanelLayout
@@ -204,7 +242,7 @@ export default function Batch() {
                         transition={{ duration: 0.5, ease: EASE_OUT_EXPO }}
                         style={{ display: "flex", flexDirection: "column", gap: 20 }}
                     >
-                        {/* Ambient blob */}
+                        {/* Ambient blob - unchanged */}
                         <motion.div
                             animate={{ x: [0, 20, 0], y: [0, -20, 0] }}
                             transition={{ duration: 16, repeat: Infinity, ease: "easeInOut" }}
@@ -217,7 +255,7 @@ export default function Batch() {
                             }}
                         />
 
-                        {/* Page heading */}
+                        {/* Page heading - unchanged */}
                         <div style={{ position: "relative", zIndex: 1 }}>
                             <div style={{
                                 fontSize: 11, fontFamily: "var(--font-mono)",
@@ -252,7 +290,7 @@ export default function Batch() {
                             </p>
                         </div>
 
-                        {/* Input card */}
+                        {/* Input card - unchanged */}
                         <motion.div
                             initial={{ opacity: 0, y: 10 }}
                             animate={{ opacity: 1, y: 0 }}
@@ -271,7 +309,6 @@ export default function Batch() {
                                     hint="One text per line"
                                 />
 
-                                {/* Ignored texts warning */}
                                 <AnimatePresence>
                                     {ignoredCount > 0 && (
                                         <motion.div
@@ -312,7 +349,7 @@ export default function Batch() {
                             </Card>
                         </motion.div>
 
-                        {/* Config card */}
+                        {/* Config card - unchanged */}
                         <motion.div
                             initial={{ opacity: 0, y: 10 }}
                             animate={{ opacity: 1, y: 0 }}
@@ -417,7 +454,7 @@ export default function Batch() {
                             </Card>
                         </motion.div>
 
-                        {/* Actions */}
+                        {/* Actions - unchanged */}
                         <motion.div
                             initial={{ opacity: 0, y: 8 }}
                             animate={{ opacity: 1, y: 0 }}
@@ -453,7 +490,7 @@ export default function Batch() {
                             </div>
                         </motion.div>
 
-                        {/* Feature bullets */}
+                        {/* Feature bullets - unchanged */}
                         <motion.div
                             initial={{ opacity: 0 }}
                             animate={{ opacity: 1 }}

@@ -1,11 +1,10 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Play, RotateCcw, Sparkles, MessageSquare } from "lucide-react";
+import { Play, RotateCcw, Sparkles, MessageSquare, History, Trash2 } from "lucide-react";
 import RequestHandler from "../lib/utilities/RequestHandler";
 import {
     TwoPanelLayout, SectionTitle, ResultCard, ResultsHeader, ResultList,
-    LoadingRow, ErrorMsg, EmptyState, Btn, Card,
-    StyledTextarea,
+    LoadingRow, ErrorMsg, EmptyState, Btn, Card, StyledTextarea, BtnDivider,
 } from "../components/ui";
 import { ResultFlash } from "../components/ResultFlash";
 
@@ -16,6 +15,115 @@ interface SingleResult {
     timestamp: string;
 }
 
+interface StoredRun {
+    id: string;
+    createdAt: number;
+    result: SingleResult;
+}
+
+const isDeployed = import.meta.env.VITE_MODE === 'deployed';
+const useElectronStorage = isDeployed && !!window.electronAPI?.isElectron;
+async function saveRun(run: StoredRun): Promise<void> {
+    if (useElectronStorage) {
+        await window.electronAPI!.saveRun_single(run);
+    } else {
+        const DB_NAME = "SingleClassificationDB";
+        const STORE_NAME = "runs";
+        const DB_VERSION = 1;
+        const openDB = (): Promise<IDBDatabase> => {
+            return new Promise((resolve, reject) => {
+                const request = indexedDB.open(DB_NAME, DB_VERSION);
+                request.onerror = () => reject(request.error);
+                request.onsuccess = () => resolve(request.result);
+                request.onupgradeneeded = (event) => {
+                    const db = (event.target as IDBOpenDBRequest).result;
+                    if (!db.objectStoreNames.contains(STORE_NAME)) {
+                        db.createObjectStore(STORE_NAME, { keyPath: "id" });
+                    }
+                };
+            });
+        };
+        const db = await openDB();
+        await new Promise<void>((resolve, reject) => {
+            const tx = db.transaction(STORE_NAME, "readwrite");
+            const store = tx.objectStore(STORE_NAME);
+            const req = store.put(run);
+            req.onerror = () => reject(req.error);
+            req.onsuccess = () => resolve();
+            tx.oncomplete = () => db.close();
+        });
+    }
+}
+
+async function getAllRuns(): Promise<StoredRun[]> {
+    if (useElectronStorage) {
+        return await window.electronAPI!.getAllRuns_single();
+    } else {
+        const DB_NAME = "SingleClassificationDB";
+        const STORE_NAME = "runs";
+        const DB_VERSION = 1;
+        const openDB = (): Promise<IDBDatabase> => {
+            return new Promise((resolve, reject) => {
+                const request = indexedDB.open(DB_NAME, DB_VERSION);
+                request.onerror = () => reject(request.error);
+                request.onsuccess = () => resolve(request.result);
+                request.onupgradeneeded = (event) => {
+                    const db = (event.target as IDBOpenDBRequest).result;
+                    if (!db.objectStoreNames.contains(STORE_NAME)) {
+                        db.createObjectStore(STORE_NAME, { keyPath: "id" });
+                    }
+                };
+            });
+        };
+        const db = await openDB();
+        return new Promise((resolve, reject) => {
+            const tx = db.transaction(STORE_NAME, "readonly");
+            const store = tx.objectStore(STORE_NAME);
+            const req = store.getAll();
+            req.onerror = () => reject(req.error);
+            req.onsuccess = () => {
+                const runs = req.result as StoredRun[];
+                runs.sort((a, b) => b.createdAt - a.createdAt);
+                resolve(runs);
+            };
+            tx.oncomplete = () => db.close();
+        });
+    }
+}
+
+async function clearAllRuns(): Promise<void> {
+    if (useElectronStorage) {
+        await window.electronAPI!.clearAllRuns_single();
+    } else {
+        const DB_NAME = "SingleClassificationDB";
+        const STORE_NAME = "runs";
+        const DB_VERSION = 1;
+        const openDB = (): Promise<IDBDatabase> => {
+            return new Promise((resolve, reject) => {
+                const request = indexedDB.open(DB_NAME, DB_VERSION);
+                request.onerror = () => reject(request.error);
+                request.onsuccess = () => resolve(request.result);
+                request.onupgradeneeded = (event) => {
+                    const db = (event.target as IDBOpenDBRequest).result;
+                    if (!db.objectStoreNames.contains(STORE_NAME)) {
+                        db.createObjectStore(STORE_NAME, { keyPath: "id" });
+                    }
+                };
+            });
+        };
+        const db = await openDB();
+        await new Promise<void>((resolve, reject) => {
+            const tx = db.transaction(STORE_NAME, "readwrite");
+            const store = tx.objectStore(STORE_NAME);
+            const req = store.clear();
+            req.onerror = () => reject(req.error);
+            req.onsuccess = () => resolve();
+            tx.oncomplete = () => db.close();
+        });
+    }
+}
+
+// ---------- Main component ----------
 const EASE_OUT_EXPO = [0.16, 1, 0.3, 1] as const;
 const STORAGE_KEY = "single_classification_state";
 
@@ -43,6 +151,16 @@ export default function Single() {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState("");
 
+    // History state
+    const [savedRuns, setSavedRuns] = useState<StoredRun[]>([]);
+    const [showHistory, setShowHistory] = useState(false);
+
+    // Load history on mount
+    useEffect(() => {
+        getAllRuns().then(setSavedRuns).catch(console.error);
+    }, []);
+
+    // Persist current text/result in localStorage
     useEffect(() => {
         const stateToSave = { text, result };
         localStorage.setItem(STORAGE_KEY, JSON.stringify(stateToSave));
@@ -58,13 +176,37 @@ export default function Single() {
         if (!data.success) return setError(data.message ?? "Request failed.");
         setResult(data.data);
         setFlashResult({ ...data.data });
+
+        // Save to history
+        const runEntry: StoredRun = {
+            id: Date.now().toString(),
+            createdAt: Date.now(),
+            result: data.data,
+        };
+        await saveRun(runEntry);
+        const updated = await getAllRuns();
+        setSavedRuns(updated);
+    };
+
+    const loadRun = (runId: string) => {
+        const run = savedRuns.find(r => r.id === runId);
+        if (run) {
+            setText(run.result.text);
+            setResult(run.result);
+            setError("");
+        }
+    };
+
+    const handleClearHistory = async () => {
+        await clearAllRuns();
+        const updated = await getAllRuns();
+        setSavedRuns(updated);
     };
 
     const clear = () => {
         setText("");
         setResult(null);
         setError("");
-        // localStorage will update via useEffect automatically
     };
 
     const charCount = text.length;
@@ -77,7 +219,6 @@ export default function Single() {
 
             <TwoPanelLayout
                 hasResults={true}
-
                 input={
                     <motion.div
                         initial={{ opacity: 0, y: 15 }}
@@ -167,7 +308,7 @@ export default function Single() {
                                     )}
                                 </AnimatePresence>
 
-                                <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 16 }}>
+                                <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 16, flexWrap: "wrap" }}>
                                     <Btn variant="primary" onClick={run} disabled={loading || !text.trim()}>
                                         {loading
                                             ? <motion.div animate={{ rotate: 360 }} transition={{ duration: 0.9, repeat: Infinity, ease: "linear" }} style={{ display: "flex" }}><Sparkles size={11} /></motion.div>
@@ -179,6 +320,20 @@ export default function Single() {
                                         <RotateCcw size={11} />
                                         Clear
                                     </Btn>
+
+                                    <BtnDivider />
+
+                                    <button
+                                        onClick={() => setShowHistory(!showHistory)}
+                                        style={{
+                                            background: "transparent", border: "1px solid var(--color-border)", borderRadius: 8,
+                                            padding: "6px 10px", fontSize: 11, display: "inline-flex", alignItems: "center", gap: 6,
+                                            color: "var(--color-text-muted)", cursor: "pointer",
+                                        }}
+                                    >
+                                        <History size={11} />
+                                        {showHistory ? "Hide" : `History${savedRuns.length > 0 ? ` (${savedRuns.length})` : ""}`}
+                                    </button>
 
                                     <AnimatePresence>
                                         {charCount > 0 && (
@@ -202,6 +357,50 @@ export default function Single() {
                                         )}
                                     </AnimatePresence>
                                 </div>
+
+                                {/* History panel */}
+                                <AnimatePresence>
+                                    {showHistory && (
+                                        <motion.div
+                                            initial={{ opacity: 0, height: 0 }}
+                                            animate={{ opacity: 1, height: "auto" }}
+                                            exit={{ opacity: 0, height: 0 }}
+                                            transition={{ duration: 0.2 }}
+                                            style={{ marginTop: 16, overflow: "hidden" }}
+                                        >
+                                            <div style={{ borderTop: "1px solid var(--color-border)", paddingTop: 12 }}>
+                                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                                                    <span style={{ fontSize: 10, fontFamily: "var(--font-mono)", color: "var(--color-text-faint)" }}>Saved runs</span>
+                                                    {savedRuns.length > 0 && (
+                                                        <button onClick={handleClearHistory} style={{ background: "none", border: "none", cursor: "pointer", color: "#ef4444", fontSize: 10, display: "flex", alignItems: "center", gap: 4 }}>
+                                                            <Trash2 size={10} /> Clear all
+                                                        </button>
+                                                    )}
+                                                </div>
+                                                {savedRuns.length === 0 ? (
+                                                    <div style={{ fontSize: 10, color: "var(--color-text-faint)", padding: "8px 0" }}>No saved runs yet.</div>
+                                                ) : (
+                                                    <select
+                                                        onChange={(e) => loadRun(e.target.value)}
+                                                        defaultValue=""
+                                                        style={{
+                                                            width: "100%", padding: "6px 8px", background: "var(--color-surface)",
+                                                            border: "1px solid var(--color-border)", borderRadius: 8,
+                                                            fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--color-text)",
+                                                        }}
+                                                    >
+                                                        <option value="">-- Load a previous run --</option>
+                                                        {savedRuns.map(run => (
+                                                            <option key={run.id} value={run.id}>
+                                                                {new Date(run.createdAt).toLocaleString()} – {run.result.predicted}
+                                                            </option>
+                                                        ))}
+                                                    </select>
+                                                )}
+                                            </div>
+                                        </motion.div>
+                                    )}
+                                </AnimatePresence>
                             </Card>
                         </motion.div>
 
@@ -218,6 +417,7 @@ export default function Single() {
                             {[
                                 "Filipino & Taglish support",
                                 "Latency tracked per request",
+                                "History of saved classifications (persists across restarts)",
                             ].map((f, i) => (
                                 <motion.div
                                     key={f}
@@ -320,7 +520,7 @@ export default function Single() {
                                         background: "color-mix(in srgb, var(--color-accent) 6%, transparent)",
                                         color: "var(--color-accent)", fontSize: 10,
                                     }}>Ctrl+Enter</kbd>{" "}
-                                    to re-classify.
+                                    to re-classify. Every run is saved in history.
                                 </motion.div>
                             </motion.div>
                         )}

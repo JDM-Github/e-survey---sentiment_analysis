@@ -12,7 +12,7 @@ _load_env()
 class Config:
     OLLAMA_API_URL   = os.getenv("OLLAMA_API_URL", "http://localhost:11434/v1/chat/completions")
     OLLAMA_API_KEY   = os.getenv("OLLAMA_API_KEY", "")
-    OLLAMA_MODEL     = os.getenv("OLLAMA_MODEL", "deepseek-v3.1:671b-cloud")
+    OLLAMA_MODEL     = os.getenv("OLLAMA_MODEL", "gemma3:27b-cloud")
     MAX_WORKERS      = int(os.getenv("MAX_WORKERS", "2"))
     REQUEST_TIMEOUT  = int(os.getenv("REQUEST_TIMEOUT", "60"))
 

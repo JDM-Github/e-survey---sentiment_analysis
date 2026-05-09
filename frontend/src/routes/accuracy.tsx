@@ -6,23 +6,7 @@ import {
     TwoPanelLayout, SectionTitle, SentimentBadge, LoadingRow, ErrorMsg, EmptyState, Btn, Card, StyledInput,
 } from "../components/ui";
 import { DownloadResults } from "../components/file-tools";
-
-interface AccuracyResult {
-    index: number;
-    text: string;
-    expected: string;
-    predicted: string;
-    score: number;
-    elapsed: number;
-    timestamp: string;
-}
-
-interface AccuracyReport {
-    total_samples: number;
-    total_score: number;
-    overall_accuracy: number;
-    results: AccuracyResult[];
-}
+import { AccuracyReport, AccuracyResult } from "../lib/interface";
 
 interface StoredRun {
     id: string;
@@ -31,53 +15,109 @@ interface StoredRun {
     report: AccuracyReport;
 }
 
-const EASE_OUT_EXPO = [0.16, 1, 0.3, 1] as const;
-
-const DB_NAME = "AccuracyDB";
-const STORE_NAME = "testResults";
-const DB_VERSION = 1;
-function openDB(): Promise<IDBDatabase> {
-    return new Promise((resolve, reject) => {
-        const request = indexedDB.open(DB_NAME, DB_VERSION);
-        request.onerror = () => reject(request.error);
-        request.onsuccess = () => resolve(request.result);
-        request.onupgradeneeded = (event) => {
-            const db = (event.target as IDBOpenDBRequest).result;
-            if (!db.objectStoreNames.contains(STORE_NAME)) {
-                db.createObjectStore(STORE_NAME, { keyPath: "id" });
-            }
-        };
-    });
-}
-
+const isDeployed = import.meta.env.VITE_MODE === 'deployed';
+const useElectronStorage = isDeployed && !!window.electronAPI?.isElectron;
 async function saveRun(run: StoredRun): Promise<void> {
-    const db = await openDB();
-    return new Promise((resolve, reject) => {
-        const tx = db.transaction(STORE_NAME, "readwrite");
-        const store = tx.objectStore(STORE_NAME);
-        const req = store.put(run);
-        req.onerror = () => reject(req.error);
-        req.onsuccess = () => resolve();
-        tx.oncomplete = () => db.close();
-    });
+    if (useElectronStorage) {
+        await window.electronAPI!.saveRun_accuracy(run);
+    } else {
+        const DB_NAME = "AccuracyDB";
+        const STORE_NAME = "testResults";
+        const DB_VERSION = 1;
+        const openDB = (): Promise<IDBDatabase> => {
+            return new Promise((resolve, reject) => {
+                const request = indexedDB.open(DB_NAME, DB_VERSION);
+                request.onerror = () => reject(request.error);
+                request.onsuccess = () => resolve(request.result);
+                request.onupgradeneeded = (event) => {
+                    const db = (event.target as IDBOpenDBRequest).result;
+                    if (!db.objectStoreNames.contains(STORE_NAME)) {
+                        db.createObjectStore(STORE_NAME, { keyPath: "id" });
+                    }
+                };
+            });
+        };
+        const db = await openDB();
+        await new Promise<void>((resolve, reject) => {
+            const tx = db.transaction(STORE_NAME, "readwrite");
+            const store = tx.objectStore(STORE_NAME);
+            const req = store.put(run);
+            req.onerror = () => reject(req.error);
+            req.onsuccess = () => resolve();
+            tx.oncomplete = () => db.close();
+        });
+    }
 }
 
 async function getAllRuns(): Promise<StoredRun[]> {
-    const db = await openDB();
-    return new Promise((resolve, reject) => {
-        const tx = db.transaction(STORE_NAME, "readonly");
-        const store = tx.objectStore(STORE_NAME);
-        const req = store.getAll();
-        req.onerror = () => reject(req.error);
-        req.onsuccess = () => {
-            const runs = req.result as StoredRun[];
-            runs.sort((a, b) => b.createdAt - a.createdAt); // newest first
-            resolve(runs);
+    if (useElectronStorage) {
+        return await window.electronAPI!.getAllRuns_accuracy();
+    } else {
+        const DB_NAME = "AccuracyDB";
+        const STORE_NAME = "testResults";
+        const DB_VERSION = 1;
+        const openDB = (): Promise<IDBDatabase> => {
+            return new Promise((resolve, reject) => {
+                const request = indexedDB.open(DB_NAME, DB_VERSION);
+                request.onerror = () => reject(request.error);
+                request.onsuccess = () => resolve(request.result);
+                request.onupgradeneeded = (event) => {
+                    const db = (event.target as IDBOpenDBRequest).result;
+                    if (!db.objectStoreNames.contains(STORE_NAME)) {
+                        db.createObjectStore(STORE_NAME, { keyPath: "id" });
+                    }
+                };
+            });
         };
-        tx.oncomplete = () => db.close();
-    });
+        const db = await openDB();
+        return new Promise((resolve, reject) => {
+            const tx = db.transaction(STORE_NAME, "readonly");
+            const store = tx.objectStore(STORE_NAME);
+            const req = store.getAll();
+            req.onerror = () => reject(req.error);
+            req.onsuccess = () => {
+                const runs = req.result as StoredRun[];
+                runs.sort((a, b) => b.createdAt - a.createdAt);
+                resolve(runs);
+            };
+            tx.oncomplete = () => db.close();
+        });
+    }
 }
 
+async function clearAllRuns(): Promise<void> {
+    if (useElectronStorage) {
+        await window.electronAPI!.clearAllRuns_accuracy();
+    } else {
+        const DB_NAME = "AccuracyDB";
+        const STORE_NAME = "testResults";
+        const DB_VERSION = 1;
+        const openDB = (): Promise<IDBDatabase> => {
+            return new Promise((resolve, reject) => {
+                const request = indexedDB.open(DB_NAME, DB_VERSION);
+                request.onerror = () => reject(request.error);
+                request.onsuccess = () => resolve(request.result);
+                request.onupgradeneeded = (event) => {
+                    const db = (event.target as IDBOpenDBRequest).result;
+                    if (!db.objectStoreNames.contains(STORE_NAME)) {
+                        db.createObjectStore(STORE_NAME, { keyPath: "id" });
+                    }
+                };
+            });
+        };
+        const db = await openDB();
+        await new Promise<void>((resolve, reject) => {
+            const tx = db.transaction(STORE_NAME, "readwrite");
+            const store = tx.objectStore(STORE_NAME);
+            const req = store.clear();
+            req.onerror = () => reject(req.error);
+            req.onsuccess = () => resolve();
+            tx.oncomplete = () => db.close();
+        });
+    }
+}
+
+// ---------- Tooltip helper (unchanged) ----------
 interface TooltipState {
     visible: boolean;
     text: string;
@@ -262,14 +302,9 @@ export default function Accuracy() {
     };
 
     const clearHistory = async () => {
-        const db = await openDB();
-        const tx = db.transaction(STORE_NAME, "readwrite");
-        const store = tx.objectStore(STORE_NAME);
-        store.clear();
-        tx.oncomplete = async () => {
-            const runs = await getAllRuns();
-            setSavedRuns(runs);
-        };
+        await clearAllRuns();
+        const updated = await getAllRuns();
+        setSavedRuns(updated);
     };
 
     const run = async () => {
@@ -315,6 +350,8 @@ export default function Accuracy() {
         setPage(Math.min(Math.max(1, newPage), totalPages));
     };
 
+    const EASE_OUT_EXPO = [0.16, 1, 0.3, 1] as const;
+
     return (
         <>
             <AnimatePresence>
@@ -330,7 +367,7 @@ export default function Accuracy() {
                         transition={{ duration: 0.5, ease: EASE_OUT_EXPO }}
                         style={{ display: "flex", flexDirection: "column", gap: 20 }}
                     >
-                        {/* Ambient blob (unchanged) */}
+                        {/* Ambient blob */}
                         <motion.div
                             animate={{ x: [0, 18, 0], y: [0, -18, 0] }}
                             transition={{ duration: 18, repeat: Infinity, ease: "easeInOut" }}

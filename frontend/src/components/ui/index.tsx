@@ -1,19 +1,13 @@
 import { type CSSProperties, type ReactNode, useCallback, useEffect, useRef, useState } from "react";
-import { motion, useInView, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { SENTIMENT_COLORS, type SentimentLabel } from "../../constants";
 import { ChevronLeft, ChevronRight, Search, X } from "lucide-react";
 import { createPortal } from "react-dom";
 
-// ─── Motion presets ────────────────────────────────────────────────────────────
-/** Snappy spring — buttons, badges: physical click feel */
 const SPRING_SNAP = { type: "spring", stiffness: 600, damping: 38, mass: 0.5 } as const;
-/** Settled spring — panels, cards: heavy landing softly */
 const SPRING_SETTLE = { type: "spring", stiffness: 340, damping: 32, mass: 0.8 } as const;
-/** Bouncy spring — counters, chips */
 const SPRING_BOUNCE = { type: "spring", stiffness: 420, damping: 22, mass: 0.6 } as const;
-/** Expo ease — page entrances, reveals */
 const EXPO = [0.16, 1, 0.3, 1] as const;
-/** Smooth ease — subtle transitions */
 const SMOOTH = [0.4, 0, 0.2, 1] as const;
 
 export const ANIM = {
