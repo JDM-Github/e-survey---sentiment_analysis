@@ -9,6 +9,7 @@ import Batch from "./routes/batch";
 import CategoryBatch from "./routes/category-batch";
 import Accuracy from "./routes/accuracy";
 import RequestHandler from "./lib/utilities/RequestHandler";
+import { DisclaimerModal } from "./components/DisclaimerModal";
 
 const routeTitles: Record<string, string> = {
 	"/": "Dashboard",
@@ -34,6 +35,7 @@ export default function App() {
 	return (
 		<div className="flex h-screen overflow-hidden bg-[var(--color-bg)] text-[var(--color-text)] font-sans">
 			<TitleUpdater />
+			<DisclaimerModal />
 			<Nav />
 			<div className="flex flex-col flex-1 min-w-0 overflow-hidden">
 				<Header />
@@ -55,9 +57,7 @@ export default function App() {
 					style={{ borderTop: "1px solid var(--color-border)" }}
 					className="h-9 bg-gradient-to-r from-[#1B3769]/5 to-[#2D5299]/5 flex items-center justify-between px-6"
 				>
-					<span className="text-[12px] font-mono text-white/50" style={{
-						letterSpacing: "-0.03em"
-					}}>
+					<span className="text-[12px] font-mono text-white/50" style={{ letterSpacing: "-0.03em" }}>
 						Developed By: John Dave Pega
 					</span>
 				</motion.footer>

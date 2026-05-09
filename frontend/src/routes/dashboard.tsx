@@ -38,10 +38,10 @@ const TOOLS = [
 		icon: FlaskConical,
 		title: "Accuracy Test",
 		subtitle: "Evaluate model performance",
-		description: "Run the built-in 30-sample labeled test. Get per-item scores and overall accuracy.",
+		description: "Run the built-in 5000 sample labeled test. Get per-item scores and overall accuracy.",
 		accent: "#EC4899",
 		endpoint: "POST /accuracy",
-		keyFeatures: ["30 labeled samples", "Per-item scoring", "Overall accuracy %", "Confusion breakdown"],
+		keyFeatures: ["5000 labeled samples", "Per-item scoring", "Overall accuracy %", "Confusion breakdown"],
 	},
 ];
 
